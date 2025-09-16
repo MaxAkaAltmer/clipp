@@ -350,7 +350,7 @@ inline T clamped_on_limits(const V& v) {
 template<class T>
 struct make {
     static inline T from(const char* s) {
-        if(!s) return false;
+        if(!s) return T{};
         //a conversion from const char* to / must exist
         return static_cast<T>(s);
     }
