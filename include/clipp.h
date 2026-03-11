@@ -6563,7 +6563,7 @@ private:
     doc_formatting usgFmt_;
     filter_function filter_;
     enum class paragraph { param, group };
-
+    mutable std::set<std::string> printed_param_keys_;
 
     /***************************************************************//**
      *
@@ -6578,6 +6578,7 @@ private:
         fos.hanging_indent(0);
         fos.paragraph_spacing(0);
         fos.ignore_newline_chars(fmt_.ignore_newline_chars());
+        printed_param_keys_.clear();
         print_doc(fos, cli_);
      }
 
@@ -6637,9 +6638,17 @@ private:
         else {
             const auto& p = ptrn.as_param();
             if(!filter_(p)) return;
+            
+            auto label = param_label(p, fmt_);
+            std::string key = label.c_str();
+            key += p.doc();
+
+            if (!printed_param_keys_.insert(key).second) {
+                return;
+            }
 
             handle_spacing(os, paragraph::param, indentLvl);
-            print_entry(os, param_label(p, fmt_), p.doc());
+            print_entry(os, label, p.doc());
         }
     }
 
