@@ -45,7 +45,7 @@
 #include <utility>
 #include <iterator>
 #include <functional>
-
+#include <unordered_set>
 
 /*************************************************************************//**
  *
@@ -6563,7 +6563,7 @@ private:
     doc_formatting usgFmt_;
     filter_function filter_;
     enum class paragraph { param, group };
-    mutable std::set<std::string> printed_param_keys_;
+    mutable std::unordered_set<std::string> printed_param_keys_;
 
     /***************************************************************//**
      *
