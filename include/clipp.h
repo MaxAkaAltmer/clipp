@@ -1,11 +1,12 @@
 /*****************************************************************************
  *  ___  _    _   ___ ___
  * |  _|| |  | | | _ \ _ \   CLIPP - command line interfaces for modern C++
- * | |_ | |_ | | |  _/  _/   version 1.2.3
- * |___||___||_| |_| |_|     https://github.com/muellan/clipp
+ * | |_ | |_ | | |  _/  _/   fork / enhanced edition (version 1.2.5) 
+ * |___||___||_| |_| |_|     https://github.com/MaxAkaAltmer/clipp
  *
  * Licensed under the MIT License <http://opensource.org/licenses/MIT>.
- * Copyright (c) 2017-2018 André Müller <foss@andremueller-online.de>
+ * Original work Copyright (c) 2017-2018 André Müller <foss@andremueller-online.de>
+ * Fork modifications Copyright (c) 2024 Maxim L. Grishin <altmer@arts-union.ru>
  *
  * ---------------------------------------------------------------------------
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -6736,6 +6737,36 @@ private:
         print_doc(fos, cli_);
      }
 
+    std::string sort_key_for(const pattern& p) const {
+        if(p.is_param()) {
+            return param_label(p.as_param(), fmt_);
+        }
+        if(p.is_group()) {
+            const auto& g = p.as_group();
+            bool anyDocInside = std::any_of(g.begin(), g.end(),
+                [](const pattern& item){ return !item.doc().empty(); });
+
+            if(anyDocInside && !g.doc().empty()) {
+                return g.doc();
+            }
+            auto lbl = usage_lines(g, usgFmt_)
+                       .ommit_outermost_group_surrounders(true).str();
+            str::trim(lbl);
+            return lbl;
+        }
+        return "";
+    }
+
+    void collect_children(const group& g, std::vector<const group::child*>& out) const {
+        for(const auto& item : g) {
+            // Если это вложенная безымянная группа (узел бинарного дерева), идем вглубь
+            if(item.is_group() && item.as_group().doc().empty()) {
+                collect_children(item.as_group(), out);
+            } else {
+                out.push_back(&item);
+            }
+        }
+    }
 
     /***************************************************************//**
      *
@@ -6748,24 +6779,34 @@ private:
     {
         if(cli.empty()) return;
 
-        //if group itself doesn't have docstring
+        // 1. Разворачиваем всё дерево в один плоский список
+        std::vector<const group::child*> items;
+        collect_children(cli, items);
+
+        // 2. Сортируем все опции разом по алфавиту
+        std::sort(items.begin(), items.end(),
+            [this](const group::child* a, const group::child* b) {
+                return sort_key_for(*a) < sort_key_for(*b);
+            });
+
+        // 3. Выводим уже отсортированный плоский список
         if(cli.doc().empty()) {
-            for(const auto& p : cli) {
-                print_doc(os, p, indentLvl);
+            for(const auto* p : items) {
+                print_doc(os, *p, indentLvl);
             }
         }
-        else { //group itself does have docstring
+        else {
             bool anyDocInside = std::any_of(cli.begin(), cli.end(),
-                [](const pattern& p){ return !p.doc().empty(); });
+                [](const group::child& p){ return !p.doc().empty(); });
 
-            if(anyDocInside) { //group docstring as title, then child entries
+            if(anyDocInside) {
                 handle_spacing(os, paragraph::group, indentLvl);
                 os << cli.doc();
-                for(const auto& p : cli) {
-                    print_doc(os, p, indentLvl + 1);
+                for(const auto* p : items) {
+                    print_doc(os, *p, indentLvl + 1);
                 }
             }
-            else { //group label first then group docstring
+            else {
                 auto lbl = usage_lines(cli, usgFmt_)
                            .ommit_outermost_group_surrounders(true).str();
 
