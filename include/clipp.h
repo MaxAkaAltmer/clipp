@@ -138,10 +138,6 @@ using match_predicate = std::function<bool(const arg_string&)>;
 using match_function  = std::function<subrange(const arg_string&)>;
 
 
-
-
-
-
 /*************************************************************************//**
  *
  * @brief type traits (NOT FOR DIRECT USE IN CLIENT CODE!)
@@ -288,6 +284,35 @@ struct has_size_getter :
  *****************************************************************************/
 namespace detail {
 
+template<class T>
+auto stringify(const T& t, int)
+    -> decltype(std::declval<std::ostringstream&>() << t, std::string())
+{
+    std::ostringstream ss;
+    ss << std::boolalpha << t;
+    return ss.str();
+}
+
+template<class T>
+auto stringify(const T& t, long)
+    -> decltype(std::begin(t), std::end(t), std::string())
+{
+    std::ostringstream ss;
+    ss << "[";
+    bool first = true;
+    for (const auto& item : t) {
+        if (!first) ss << ", ";
+        first = false;
+        ss << item;
+    }
+    ss << "]";
+    return ss.str();
+}
+
+template<class T>
+inline std::string stringify(const T&, ...) {
+    return "";
+}
 
 /*************************************************************************//**
  * @brief forwards string to first non-whitespace char;
@@ -1948,6 +1973,58 @@ public:
         label_{}, required_{false}, greedy_{false}
     {}
 
+    //---------------------------------------------------------------
+    const doc_string& default_value() const noexcept { return default_val_; }
+
+    void update_doc() {
+        if (raw_doc_.empty()) {
+            detail::token<parameter>::doc("");
+        } else if (default_val_.empty()) {
+            detail::token<parameter>::doc(raw_doc_);
+        } else {
+            detail::token<parameter>::doc(raw_doc_ + " (default = " + default_val_ + ")");
+        }
+    }
+
+    void clear_default() {
+        default_val_.clear();
+        update_doc();
+    }
+
+    parameter& bind_default() noexcept { return *this; }
+
+    template<class Target>
+    parameter& bind_default(const Target& target) {
+        default_val_ = detail::stringify(target, 0);
+        update_doc();
+        return *this;
+    }
+
+    const doc_string& doc() const noexcept {
+        return detail::token<parameter>::doc();
+    }
+
+    parameter& doc(doc_string d) {
+        raw_doc_ = std::move(d);
+        // Если это одиночный обязательный флаг (required("-f").set(...)) — дефолт не нужен
+        if (required() && !flags().empty()) {
+            default_val_.clear();
+        }
+        update_doc();
+        return *this;
+    }
+
+    template<class Target>
+    parameter& set(Target& target) {
+        detail::action_provider<parameter>::set(target);
+        return bind_default(target);
+    }
+
+    template<class Target, class Value>
+    parameter& set(Target& target, Value&& val) {
+        detail::action_provider<parameter>::set(target, std::forward<Value>(val));
+        return bind_default(target);
+    }
 
     //---------------------------------------------------------------
     /** @brief returns if a parameter is required */
@@ -2146,6 +2223,8 @@ private:
     doc_string label_;
     bool required_ = false;
     bool greedy_ = false;
+    doc_string raw_doc_;
+    std::string default_val_;
 };
 
 
@@ -2209,7 +2288,8 @@ value(const doc_string& label, Targets&&... tgts)
     return parameter{match::nonempty}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(true).blocking(true).repeatable(false);
+        .required(true).blocking(true).repeatable(false)
+        .bind_default(tgts...);
 }
 
 template<class Filter, class... Targets, class = typename std::enable_if<
@@ -2221,7 +2301,8 @@ value(Filter&& filter, doc_string label, Targets&&... tgts)
     return parameter{std::forward<Filter>(filter)}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(true).blocking(true).repeatable(false);
+        .required(true).blocking(true).repeatable(false)
+        .bind_default(tgts...);
 }
 
 
@@ -2239,7 +2320,8 @@ values(const doc_string& label, Targets&&... tgts)
     return parameter{match::nonempty}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(true).blocking(true).repeatable(true);
+        .required(true).blocking(true).repeatable(true)
+        .bind_default(tgts...);
 }
 
 template<class Filter, class... Targets, class = typename std::enable_if<
@@ -2251,7 +2333,8 @@ values(Filter&& filter, doc_string label, Targets&&... tgts)
     return parameter{std::forward<Filter>(filter)}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(true).blocking(true).repeatable(true);
+        .required(true).blocking(true).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2269,7 +2352,8 @@ opt_value(const doc_string& label, Targets&&... tgts)
     return parameter{match::nonempty}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(false);
+        .required(false).blocking(false).repeatable(false)
+        .bind_default(tgts...);
 }
 
 template<class Filter, class... Targets, class = typename std::enable_if<
@@ -2281,7 +2365,8 @@ opt_value(Filter&& filter, doc_string label, Targets&&... tgts)
     return parameter{std::forward<Filter>(filter)}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(false);
+        .required(false).blocking(false).repeatable(false)
+        .bind_default(tgts...);
 }
 
 
@@ -2299,7 +2384,8 @@ opt_values(const doc_string& label, Targets&&... tgts)
     return parameter{match::nonempty}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 template<class Filter, class... Targets, class = typename std::enable_if<
@@ -2311,7 +2397,8 @@ opt_values(Filter&& filter, doc_string label, Targets&&... tgts)
     return parameter{std::forward<Filter>(filter)}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2365,7 +2452,8 @@ opt_word(const doc_string& label, Targets&&... tgts)
     return parameter{match::alphanumeric}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(false);
+        .required(false).blocking(false).repeatable(false)
+        .bind_default(tgts...);
 }
 
 
@@ -2383,7 +2471,8 @@ opt_words(const doc_string& label, Targets&&... tgts)
     return parameter{match::alphanumeric}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2437,7 +2526,8 @@ opt_number(const doc_string& label, Targets&&... tgts)
     return parameter{match::numbers{}}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(false);
+        .required(false).blocking(false).repeatable(false)
+        .bind_default(tgts...);
 }
 
 
@@ -2455,7 +2545,8 @@ opt_numbers(const doc_string& label, Targets&&... tgts)
     return parameter{match::numbers{}}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2509,7 +2600,8 @@ opt_integer(const doc_string& label, Targets&&... tgts)
     return parameter{match::integers{}}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(false);
+        .required(false).blocking(false).repeatable(false)
+        .bind_default(tgts...);
 }
 
 
@@ -2527,7 +2619,8 @@ opt_integers(const doc_string& label, Targets&&... tgts)
     return parameter{match::integers{}}
         .label(label)
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2543,7 +2636,8 @@ any_other(Targets&&... tgts)
 {
     return parameter{match::any}
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -2561,7 +2655,8 @@ any(Filter&& filter, Targets&&... tgts)
 {
     return parameter{std::forward<Filter>(filter)}
         .target(std::forward<Targets>(tgts)...)
-        .required(false).blocking(false).repeatable(true);
+        .required(false).blocking(false).repeatable(true)
+        .bind_default(tgts...);
 }
 
 
@@ -3124,6 +3219,42 @@ public:
         push_back(std::move(p1), std::move(p2), std::move(ps)...);
     }
 
+    //-----------------------------------------------------
+    doc_string find_default_value() const {
+        for (const auto& p : children_) {
+            if (p.is_group()) {
+                auto def = p.as_group().find_default_value();
+                if (!def.empty()) return def;
+            } else if (p.is_param()) {
+                const auto& def = p.as_param().default_value();
+                if (!def.empty()) return def;
+            }
+        }
+        return {};
+    }
+
+    void clear_defaults() {
+        for (auto& c : children_) {
+            if (c.is_param()) c.as_param().clear_default();
+            else if (c.is_group()) c.as_group().clear_defaults();
+        }
+    }
+
+    const doc_string& doc() const noexcept {
+        return detail::token<group>::doc();
+    }
+
+    group& doc(doc_string d) {
+        // Дописываем дефолт ТОЛЬКО если в группе есть опциональные элементы
+        if (!all_required()) {
+            auto def = find_default_value();
+            if (!def.empty()) {
+                d += " (default = " + def + ")";
+            }
+        }
+        detail::token<group>::doc(std::move(d));
+        return *this;
+    }
 
     //-----------------------------------------------------
     group(const group&) = default;
@@ -3507,7 +3638,18 @@ private:
     bool scoped_ = false;
 };
 
-
+inline parameter& operator % (parameter& p, doc_string d) {
+    return p.doc(std::move(d));
+}
+inline parameter&& operator % (parameter&& p, doc_string d) {
+    return std::move(p.doc(std::move(d)));
+}
+inline group& operator % (group& g, doc_string d) {
+    return g.doc(std::move(d));
+}
+inline group&& operator % (group&& g, doc_string d) {
+    return std::move(g.doc(std::move(d)));
+}
 
 /*************************************************************************//**
  *
@@ -3695,7 +3837,9 @@ operator & (parameter a, parameter b)
 {
     a.blocking(true);
     b.blocking(true);
-    return group{std::move(a), std::move(b)}.scoped(true);
+    auto g = group{std::move(a), std::move(b)}.scoped(true);
+    if (g.all_required()) g.clear_defaults();
+    return g;
 }
 
 //---------------------------------------------------------
@@ -3703,7 +3847,9 @@ inline group
 operator & (parameter a, group b)
 {
     a.blocking(true);
-    return group{std::move(a), std::move(b)}.scoped(true);
+    auto g = group{std::move(a), std::move(b)}.scoped(true);
+    if (g.all_required()) g.clear_defaults();
+    return g;
 }
 
 //---------------------------------------------------------
@@ -3714,14 +3860,19 @@ operator & (group a, parameter b)
     if(a.all_blocking() && !a.exclusive() && !a.repeatable() && !a.joinable()
         && (a.doc().empty() || a.doc() == b.doc()))
     {
-        return a.push_back(std::move(b));
+        a.push_back(std::move(b));
+        if (a.all_required()) a.clear_defaults();
+        return a;
     }
     else {
         if(!a.all_blocking()) a.blocking(true);
-        return group{std::move(a), std::move(b)}.scoped(true);
+        auto g = group{std::move(a), std::move(b)}.scoped(true);
+        if (g.all_required()) g.clear_defaults();
+        return g;
     }
 }
 
+//---------------------------------------------------------
 inline group
 operator & (group a, group b)
 {
@@ -3729,14 +3880,17 @@ operator & (group a, group b)
     if(a.all_blocking() && !a.exclusive() && !a.repeatable()
         && !a.joinable() && (a.doc().empty() || a.doc() == b.doc()))
     {
-        return a.push_back(std::move(b));
+        a.push_back(std::move(b));
+        if (a.all_required()) a.clear_defaults();
+        return a;
     }
     else {
         if(!a.all_blocking()) a.blocking(true);
-        return group{std::move(a), std::move(b)}.scoped(true);
+        auto g = group{std::move(a), std::move(b)}.scoped(true);
+        if (g.all_required()) g.clear_defaults();
+        return g;
     }
 }
-
 
 
 /*************************************************************************//**
@@ -5668,7 +5822,7 @@ private:
     string groupSep_      = string(" ");
     string altParamSep_   = string("|");
     string altGroupSep_   = string(" | ");
-    string flagSep_       = string(", ");
+    string flagSep_       = string("/");
     string labelPre_      = string("<");
     string labelPst_      = string(">");
     string optionPre_     = string("[");
@@ -5688,7 +5842,7 @@ private:
     int docCol_ = 20;
     int lastCol_ = 100;
     int indentSize_ = 4;
-    int maxAltInUsage_ = 1;
+    int maxAltInUsage_ = 2;
     int maxAltInDocs_ = 32;
     int lineSpc_ = 0;
     int paragraphSpc_ = 1;
