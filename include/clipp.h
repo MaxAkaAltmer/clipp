@@ -6,7 +6,7 @@
  *
  * Licensed under the MIT License <http://opensource.org/licenses/MIT>.
  * Original work Copyright (c) 2017-2018 André Müller <foss@andremueller-online.de>
- * Fork modifications Copyright (c) 2024 Maxim L. Grishin <altmer@arts-union.ru>
+ * Fork modifications Copyright (c) 2026 Maxim L. Grishin <altmer@arts-union.ru>
  *
  * ---------------------------------------------------------------------------
  * Permission is hereby granted, free of charge, to any person obtaining a
