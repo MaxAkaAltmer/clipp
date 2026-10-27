@@ -22,9 +22,9 @@ This fork by [Maxim L. Grishin](https://github.com/MaxAkaAltmer) enhances the or
 3. **Automatic Whitespace & Newline Trimming**
    - All string arguments and string vectors are automatically trimmed of leading and trailing whitespace characters (` `, `\t`, `\r`, `\n`). Safe for UTF-8 input.
 
-4. **Natural Alphabetical Sorting of Options**
-   - Documentation options across grammar trees are automatically sorted in natural ASCII/lexicographical order, keeping help menus clean and predictable.
-   - Built-in parameter deduplication prevents duplicate doc entries.
+4. **Natural Alphabetical Sorting & Parameter Deduplication**
+   - Documentation options across binary grammar trees are automatically sorted in natural ASCII/lexicographical order, keeping help menus clean and predictable.
+   - **Eliminated duplicate entries**: In original `clipp`, shared options across multiple subcommands or grammar branches were printed multiple times. This fork automatically deduplicates parameters, ensuring every unique option appears in `OPTIONS` exactly once.
 
 5. **Argument Validation API (`.check(...)`)**
    - Fluent argument validation via predicates directly on parameters.
