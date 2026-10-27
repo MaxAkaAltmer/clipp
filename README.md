@@ -77,9 +77,9 @@ int main(int argc, char* argv[]) {
 ```text
 $ ./app -p 99999 -m unknown
 
-Errors: Argument '99999' is not allowed in this context
-Errors: Argument 'unknown' is not allowed in this context
-Errors: Missing required parameter: <files>
+Error: Argument '99999' is not allowed in this context
+Error: Argument 'unknown' is not allowed in this context
+Error: Missing required parameter: <files>
 
 SYNOPSIS
         app [--port/-p <port>] [--mode/-m <mode>] <files>...
