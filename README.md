@@ -35,6 +35,67 @@ This fork by [Maxim L. Grishin](https://github.com/MaxAkaAltmer) enhances the or
      - `clipp::power_of_two()` — validates positive power-of-two values.
      - Custom lambdas: `.check([](const std::string& v) { return ...; })`.
 
+### Quick Example
+
+```cpp
+#include "clipp.h"
+#include <iostream>
+#include <vector>
+
+int main(int argc, char* argv[]) {
+    int port = 8080;
+    std::string mode = "fast";
+    std::vector<std::string> inputs;
+
+    auto cli = (
+        clipp::option("-p", "--port") & clipp::value("port", port)
+            .check(clipp::range(1024, 65535))
+            % "Server port",
+
+        clipp::option("-m", "--mode") & clipp::value("mode", mode)
+            .check(clipp::one_of({"fast", "accurate", "balanced"}))
+            % "Processing mode",
+
+        clipp::values("files", inputs)
+            .check(clipp::existing_file())
+            % "Input files to process"
+    );
+
+    auto res = clipp::parse(argc, argv, cli);
+
+    if (!res) {
+        std::cerr << res.error_message() << "\n";
+        std::cerr << clipp::make_man_page(cli, argv[0]) << "\n";
+        return 1;
+    }
+
+    return 0;
+}
+```
+#### Output example
+
+```text
+$ ./app -p 99999 -m unknown
+
+Errors: Argument '99999' is not allowed in this context
+Errors: Argument 'unknown' is not allowed in this context
+Errors: Missing required parameter: <files>
+
+SYNOPSIS
+        app [--port/-p <port>] [--mode/-m <mode>] <files>...
+
+OPTIONS
+        -m, --mode <mode>
+                    Processing mode (default = fast)
+
+        -p, --port <port>
+                    Server port (default = 8080)
+
+        <files>     Input files to process
+```
+
+## Core Documentation
+
 Easy to use, powerful and expressive command line argument handling for C++11/14/17 contained in a **single header file**. 
 
 - options, options+value(s), positional values, positional commands, nested alternatives, decision trees, joinable flags, custom value filters, ...
