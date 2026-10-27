@@ -3,7 +3,37 @@ clipp - command line interfaces for modern C++
 
 [![Linux build status](https://travis-ci.org/muellan/clipp.svg?branch=master)](https://travis-ci.org/muellan/clipp) [![MSVC build status](https://ci.appveyor.com/api/projects/status/ci29ngpfks980i7g?svg=true)](https://ci.appveyor.com/project/muellan/clipp)
 
-This is a maintained fork of muellan/clipp with quality-of-life fixes: automatic default value printing, deduplication in help, and alphabetical option sorting.
+## Fork Enhancements & Improvements
+
+This fork by [Maxim L. Grishin](https://github.com/MaxAkaAltmer) enhances the original `clipp` library with several quality-of-life improvements, bugfixes, and modern CLI features while maintaining 100% backward compatibility and thread safety (no global state).
+
+### Key Features Added
+
+1. **Automatic Default Values in Documentation**
+   - Documentation automatically reflects default values: `(default = ...)`.
+   - Supports primitive types, strings, and standard containers (e.g. `std::vector` formatted as `[val1, val2]`).
+   - Empty containers do not produce empty default strings (no `(default = [])`).
+   - Required parameters (`required & value(...)`) automatically suppress default value annotations in help docs.
+
+2. **Smart Container Overwrite (Vectors)**
+   - Specifying container arguments via CLI now **clears default elements** on first match instead of appending (`push_back`) on top of predefined defaults.
+   - If CLI arguments are omitted, initial defaults remain untouched.
+
+3. **Automatic Whitespace & Newline Trimming**
+   - All string arguments and string vectors are automatically trimmed of leading and trailing whitespace characters (` `, `\t`, `\r`, `\n`). Safe for UTF-8 input.
+
+4. **Natural Alphabetical Sorting of Options**
+   - Documentation options across grammar trees are automatically sorted in natural ASCII/lexicographical order, keeping help menus clean and predictable.
+   - Built-in parameter deduplication prevents duplicate doc entries.
+
+5. **Argument Validation API (`.check(...)`)**
+   - Fluent argument validation via predicates directly on parameters.
+   - Built-in out-of-the-box validators:
+     - `clipp::range(min, max)` — bounds checking for numeric types.
+     - `clipp::one_of({...})` — whitelist of permitted values.
+     - `clipp::existing_file()` — ensures specified file path exists on disk.
+     - `clipp::power_of_two()` — validates positive power-of-two values.
+     - Custom lambdas: `.check([](const std::string& v) { return ...; })`.
 
 Easy to use, powerful and expressive command line argument handling for C++11/14/17 contained in a **single header file**. 
 
