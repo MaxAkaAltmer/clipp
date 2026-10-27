@@ -1,7 +1,7 @@
 /*****************************************************************************
  *  ___  _    _   ___ ___
  * |  _|| |  | | | _ \ _ \   CLIPP - command line interfaces for modern C++
- * | |_ | |_ | | |  _/  _/   fork / enhanced edition (version 1.2.5) 
+ * | |_ | |_ | | |  _/  _/   fork / enhanced edition (version 1.2.5)
  * |___||___||_| |_| |_|     https://github.com/MaxAkaAltmer/clipp
  *
  * Licensed under the MIT License <http://opensource.org/licenses/MIT>.
@@ -298,6 +298,10 @@ template<class T>
 auto stringify(const T& t, long)
     -> decltype(std::begin(t), std::end(t), std::string())
 {
+    if (std::begin(t) == std::end(t)) {
+        return "";
+    }
+
     std::ostringstream ss;
     ss << "[";
     bool first = true;
@@ -631,10 +635,26 @@ public:
     map_arg_to(T& target) noexcept : t_{std::addressof(target)} {}
 
     void operator () (const char* s) const {
-        if(t_ && s) *t_ = detail::make<T>::from(s);
+        if(t_ && s) {
+            auto val = detail::make<T>::from(s);
+            trim_whitespace(val); // <--- Чистим одиночные параметры
+            *t_ = std::move(val);
+        }
     }
 
 private:
+    static void trim_whitespace(std::string& str) {
+        while (!str.empty() && std::isspace(static_cast<unsigned char>(str.back()))) {
+            str.pop_back();
+        }
+        while (!str.empty() && std::isspace(static_cast<unsigned char>(str.front()))) {
+            str.erase(str.begin());
+        }
+    }
+
+    template<class U>
+    static void trim_whitespace(U&) {}
+
     T* t_;
 };
 
@@ -647,14 +667,39 @@ template<class T>
 class map_arg_to<std::vector<T>>
 {
 public:
-    map_arg_to(std::vector<T>& target): t_{std::addressof(target)} {}
+    map_arg_to(std::vector<T>& target):
+        t_{std::addressof(target)},
+        first_{std::make_shared<bool>(true)}
+    {}
 
     void operator () (const char* s) const {
-        if(t_ && s) t_->push_back(detail::make<T>::from(s));
+        if(t_ && s) {
+            if(*first_) {
+                t_->clear();
+                *first_ = false;
+            }
+            auto item = detail::make<T>::from(s);
+            trim_whitespace(item);
+            t_->push_back(std::move(item));
+        }
     }
 
 private:
+
+    static void trim_whitespace(std::string& str) {
+        while (!str.empty() && std::isspace(static_cast<unsigned char>(str.back()))) {
+            str.pop_back();
+        }
+        while (!str.empty() && std::isspace(static_cast<unsigned char>(str.front()))) {
+            str.erase(str.begin());
+        }
+    }
+
+    template<class U>
+    static void trim_whitespace(U&) {}
+
     std::vector<T>* t_;
+    std::shared_ptr<bool> first_;
 };
 
 
@@ -1975,6 +2020,18 @@ public:
     {}
 
     //---------------------------------------------------------------
+
+    template<class Predicate>
+    parameter& check(Predicate pred) {
+        auto old_matcher = matcher_;
+        matcher_ = [old_matcher, pred](const arg_string& arg) -> subrange {
+            auto res = old_matcher(arg);
+            if (res && pred(arg)) return res;
+            return subrange{}; // Валидация провалена -> аргумент не матчится!
+        };
+        return *this;
+    }
+
     const doc_string& default_value() const noexcept { return default_val_; }
 
     void update_doc() {
@@ -4595,7 +4652,7 @@ longest_prefix_match(scoped_dfs_traverser pos, const arg_string& arg,
                         return match_t{arg, std::move(pos)};
                     }
                     else if(match.length() > longest.length()) {
-                        longest = match_t{arg.substr(match.at(), match.length()), 
+                        longest = match_t{arg.substr(match.at(), match.length()),
                                           pos};
                     }
                 }
@@ -5226,8 +5283,22 @@ private:
     bool blocked_;
 };
 
-
-
+namespace detail {
+inline std::string param_label_or_flag(const parameter* p) {
+    if (!p) return "parameter";
+    if (!p->flags().empty()) {
+        std::string s = p->flags()[0];
+        for (std::size_t i = 1; i < p->flags().size(); ++i) {
+            s += ", " + p->flags()[i];
+        }
+        if (!p->label().empty()) s += " <" + p->label() + ">";
+        return s;
+    }
+    if (!p->label().empty()) {
+        return "<" + p->label() + ">";
+    }
+    return "parameter";
+}}
 
 /*************************************************************************//**
  *
@@ -5251,6 +5322,54 @@ public:
     parsing_result(arg_mappings arg2param, missing_events misses):
         arg2param_{std::move(arg2param)}, missing_{std::move(misses)}
     {}
+
+    /** @brief returns a list of human-readable error descriptions */
+    std::vector<std::string> errors() const {
+        if (!any_error()) return {};
+
+        std::vector<std::string> errs;
+
+        for (const auto& m : missing_) {
+            if (m.param()) {
+                errs.push_back("Missing required parameter: " + detail::param_label_or_flag(m.param()));
+            } else {
+                errs.push_back("Missing required parameter");
+            }
+        }
+
+        for (const auto& a : arg2param_) {
+            if (!a.param()) {
+                if (!a.arg().empty() && a.arg()[0] == '-') {
+                    errs.push_back("Unknown option '" + a.arg() + "'");
+                } else {
+                    errs.push_back("Unexpected or invalid argument '" + a.arg() + "'");
+                }
+            }
+            else if (a.conflict()) {
+                errs.push_back("Conflicting argument '" + a.arg() + "' for " + detail::param_label_or_flag(a.param()));
+            }
+            else if (a.bad_repeat()) {
+                errs.push_back("Argument '" + a.arg() + "' for " + detail::param_label_or_flag(a.param()) + " cannot be repeated");
+            }
+            else if (a.blocked()) {
+                errs.push_back("Argument '" + a.arg() + "' is not allowed in this context");
+            }
+        }
+
+        return errs;
+    }
+
+    /** @brief returns all error descriptions formatted as a single string */
+    std::string error_message() const {
+        auto errs = errors();
+        if (errs.empty()) return "";
+        std::ostringstream ss;
+        for (std::size_t i = 0; i < errs.size(); ++i) {
+            if (i > 0) ss << "\n";
+            ss << "Error: " << errs[i];
+        }
+        return ss.str();
+    }
 
     //-----------------------------------------------------
     /** @brief returns number of arguments that could not be mapped to
@@ -6833,7 +6952,7 @@ private:
         else {
             const auto& p = ptrn.as_param();
             if(!filter_(p)) return;
-            
+
             auto label = param_label(p, fmt_);
             std::string key = label.c_str();
             key += p.doc();
@@ -7222,7 +7341,53 @@ void print(OStream& os, const group& g, int level)
 
 
 } // namespace debug
+
+/*************************************************************************//**
+ *
+ * @brief Validators (inspired by CLI11)
+ *
+ *****************************************************************************/
+
+inline auto one_of(std::initializer_list<std::string> allowed) {
+    std::vector<std::string> set(allowed);
+    return [set](const arg_string& s) {
+        return std::find(set.begin(), set.end(), s) != set.end();
+    };
+}
+
+template<class T>
+inline auto range(T min_val, T max_val) {
+    return [min_val, max_val](const arg_string& s) {
+        try {
+            double v = std::stod(s);
+            return v >= static_cast<double>(min_val) && v <= static_cast<double>(max_val);
+        } catch (...) {
+            return false;
+        }
+    };
+}
+
+inline bool existing_file(const arg_string& path) {
+#if defined(_WIN32)
+    struct _stat buffer;
+    return (_stat(path.c_str(), &buffer) == 0);
+#else
+    struct stat buffer;
+    return (stat(path.c_str(), &buffer) == 0);
+#endif
+}
+
+inline bool power_of_two(const arg_string& s) {
+    try {
+        std::size_t pos = 0;
+        long long v = std::stoll(s, &pos);
+        // pos == s.size() гарантирует, что в строке не было мусора типа "16abc"
+        return (pos == s.size()) && (v > 0) && ((v & (v - 1)) == 0);
+    } catch (...) {
+        return false;
+    }
+}
+
 } //namespace clipp
 
 #endif
-
