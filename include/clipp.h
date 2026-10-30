@@ -5449,6 +5449,10 @@ void sanitize_args(arg_list& args)
 
     if(args.empty()) return;
 
+    for (auto& a : args) {
+        clipp::str::trim(a);
+    }
+
     for(auto i = begin(args)+1; i != end(args); ++i) {
         if(i != begin(args) && i->size() > 1 &&
             i->find('.') == 0 && std::isdigit((*i)[1]) )
