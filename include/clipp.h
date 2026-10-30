@@ -5450,7 +5450,8 @@ void sanitize_args(arg_list& args)
     if(args.empty()) return;
 
     for (auto& a : args) {
-        clipp::str::trim(a);
+        while (!a.empty() && std::isspace(static_cast<unsigned char>(a.back()))) a.pop_back();
+        while (!a.empty() && std::isspace(static_cast<unsigned char>(a.front()))) a.erase(a.begin());
     }
 
     for(auto i = begin(args)+1; i != end(args); ++i) {
